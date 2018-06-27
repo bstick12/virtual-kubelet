@@ -39,6 +39,12 @@
   version = "v0.3.0"
 
 [[projects]]
+  name = "github.com/Masterminds/semver"
+  packages = ["."]
+  revision = "c7af12943936e8c39859482e61f0574c2fd7fc75"
+  version = "v1.4.2"
+
+[[projects]]
   name = "github.com/Microsoft/go-winio"
   packages = ["."]
   revision = "7da180ee92d8bd8bb8c37fc560e673e6557c392f"
@@ -117,9 +123,21 @@
 
 [[projects]]
   branch = "master"
+  name = "github.com/cloudfoundry-community/go-cfclient"
+  packages = ["."]
+  revision = "fa0a00f12fa532d25093d8d6492dbeec085c050e"
+
+[[projects]]
+  branch = "master"
   name = "github.com/cloudfoundry-incubator/candiedyaml"
   packages = ["."]
   revision = "a41693b7b7afb422c7ecb1028458ab27da047bbb"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/cloudfoundry/gofileutils"
+  packages = ["fileutils"]
+  revision = "4d0c80011a0f37da1711c184028bc40137cd45af"
 
 [[projects]]
   name = "github.com/davecgh/go-spew"
@@ -817,6 +835,16 @@
 
 [[projects]]
   branch = "master"
+  name = "golang.org/x/oauth2"
+  packages = [
+    ".",
+    "clientcredentials",
+    "internal"
+  ]
+  revision = "ef147856a6ddbb60760db74283d2424e98c87bff"
+
+[[projects]]
+  branch = "master"
   name = "golang.org/x/sys"
   packages = [
     "unix",
@@ -851,6 +879,20 @@
   name = "golang.org/x/time"
   packages = ["rate"]
   revision = "fbb02b2291d28baffd63558aa44b4b56f178d650"
+
+[[projects]]
+  name = "google.golang.org/appengine"
+  packages = [
+    "internal",
+    "internal/base",
+    "internal/datastore",
+    "internal/log",
+    "internal/remote_api",
+    "internal/urlfetch",
+    "urlfetch"
+  ]
+  revision = "b1f26356af11148e710935ed1ac8a7f5702c7612"
+  version = "v1.1.0"
 
 [[projects]]
   branch = "master"
@@ -1074,6 +1116,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "8f3ca80656c580339bc7105912693cf126c4952c476e7052cbd9de4ef73d9e75"
+  inputs-digest = "1704ff459525f278df40b904035348a5be419a6d92dd0f3d264cc8b6c2a3d0df"
   solver-name = "gps-cdcl"
   solver-version = 1
