@@ -1,12 +1,17 @@
 package cf
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"log"
+	"net/http"
 	"os"
 	"time"
 
 	cfclient "github.com/cloudfoundry-community/go-cfclient"
+	"github.com/pkg/errors"
 	"github.com/virtual-kubelet/virtual-kubelet/manager"
 	"github.com/virtual-kubelet/virtual-kubelet/providers"
 	"k8s.io/api/core/v1"
@@ -23,6 +28,52 @@ type CFProvider struct {
 	pods               map[string]*v1.Pod
 	providerConfig     providerConfig
 	cfClient           *cfclient.Client
+	Org                cfclient.Org
+	Space              cfclient.Space
+}
+
+type DockerAppCreateRequest struct {
+	Name        string `json:"name"`
+	SpaceGuid   string `json:"space_guid"`
+	DockerImage string `json:"docker_image"`
+	Diego       bool   `json:"diego"`
+}
+
+func (p *CFProvider) CreateDockerApp(req DockerAppCreateRequest) (cfclient.App, error) {
+	var appResp cfclient.AppResource
+	buf := bytes.NewBuffer(nil)
+	err := json.NewEncoder(buf).Encode(req)
+	if err != nil {
+		return cfclient.App{}, err
+	}
+	r := p.cfClient.NewRequestWithBody("POST", "/v2/apps", buf)
+	resp, err := p.cfClient.DoRequest(r)
+	if err != nil {
+		return cfclient.App{}, errors.Wrapf(err, "Error creating app %s", req.Name)
+	}
+	if resp.StatusCode != http.StatusCreated {
+		return cfclient.App{}, errors.Wrapf(err, "Error creating app %s, response code: %d", req.Name, resp.StatusCode)
+	}
+	resBody, err := ioutil.ReadAll(resp.Body)
+	defer resp.Body.Close()
+	if err != nil {
+		return cfclient.App{}, errors.Wrapf(err, "Error reading app %s http response body", req.Name)
+	}
+	err = json.Unmarshal(resBody, &appResp)
+	if err != nil {
+		return cfclient.App{}, errors.Wrapf(err, "Error deserializing app %s response", req.Name)
+	}
+	return mergeAppResource(appResp), nil
+
+}
+
+func mergeAppResource(app cfclient.AppResource) cfclient.App {
+	app.Entity.Guid = app.Meta.Guid
+	app.Entity.CreatedAt = app.Meta.CreatedAt
+	app.Entity.UpdatedAt = app.Meta.UpdatedAt
+	app.Entity.SpaceData.Entity.Guid = app.Entity.SpaceData.Meta.Guid
+	app.Entity.SpaceData.Entity.OrgData.Entity.Guid = app.Entity.SpaceData.Entity.OrgData.Meta.Guid
+	return app.Entity
 }
 
 // NewCFProvider creates a new CFProvider
@@ -71,6 +122,28 @@ func NewCFProvider(config string, rm *manager.ResourceManager, nodeName, operati
 	return &provider, nil
 }
 
+func (p *CFProvider) createApp(appRequest DockerAppCreateRequest) error {
+
+	app, err := p.CreateDockerApp(appRequest)
+
+	// app, err := provider.cfClient.CreateApp(appCreateRequest)
+	if err != nil {
+		return err
+	}
+
+	appUpdateResource := cfclient.AppUpdateResource{
+		State: "STARTED",
+	}
+
+	_, err = p.cfClient.UpdateApp(app.Guid, appUpdateResource)
+
+	if err != nil {
+		return err
+	}
+	return nil
+
+}
+
 // CreatePod accepts a Pod definition and stores it in memory.
 func (p *CFProvider) CreatePod(pod *v1.Pod) error {
 	log.Printf("receive CreatePod %q\n", pod.Name)
@@ -80,12 +153,69 @@ func (p *CFProvider) CreatePod(pod *v1.Pod) error {
 		return err
 	}
 
+	containers := p.getContainers(pod)
+	if len(containers) != 1 {
+		return errors.New("too many containers")
+	}
+
+	appCreateRequest := DockerAppCreateRequest{
+		Name:        pod.Name,
+		SpaceGuid:   p.Space.Guid,
+		DockerImage: containers[0],
+		Diego:       true,
+	}
+
+	err = p.createApp(appCreateRequest)
+	if err != nil {
+		return err
+	}
+
 	p.pods[key] = pod
 
 	return nil
 }
 
-// UpdatePod accepts a Pod definition and updates its reference.
+func (p *CFProvider) getContainers(pod *v1.Pod) []string {
+	containers := make([]string, 0, len(pod.Spec.Containers))
+	for _, container := range pod.Spec.Containers {
+		c := container.Image
+
+		// c.EnvironmentVariables = make([]aci.EnvironmentVariable, 0, len(container.Env))
+		// for _, e := range container.Env {
+		// 	c.EnvironmentVariables = append(c.EnvironmentVariables, aci.EnvironmentVariable{
+		// 		Name:  e.Name,
+		// 		Value: e.Value,
+		// 	})
+		// }
+
+		// cpuRequest := 1.00
+		// if _, ok := container.Resources.Requests[v1.ResourceCPU]; ok {
+		// 	cpuRequest = float64(container.Resources.Requests.Cpu().MilliValue()/10.00) / 100.00
+		// 	if cpuRequest < 0.01 {
+		// 		cpuRequest = 0.01
+		// 	}
+		// }
+
+		// memoryRequest := 1.50
+		// if _, ok := container.Resources.Requests[v1.ResourceMemory]; ok {
+		// 	memoryRequest = float64(container.Resources.Requests.Memory().Value()/100000000.00) / 10.00
+		// 	if memoryRequest < 0.10 {
+		// 		memoryRequest = 0.10
+		// 	}
+		// }
+
+		// c.Resources = aci.ResourceRequirements{
+		// 	Requests: &aci.ResourceRequests{
+		// 		CPU:        cpuRequest,
+		// 		MemoryInGB: memoryRequest,
+		// 	},
+		// }
+
+		containers = append(containers, c)
+	}
+	return containers
+}
+
 func (p *CFProvider) UpdatePod(pod *v1.Pod) error {
 	log.Printf("receive UpdatePod %q\n", pod.Name)
 
@@ -304,6 +434,7 @@ func buildKey(pod *v1.Pod) (string, error) {
 func (p *CFProvider) EnsureOrgAndSpace() error {
 
 	var org cfclient.Org
+	var space cfclient.Space
 
 	org, err := p.cfClient.GetOrgByName(p.providerConfig.Org)
 	if err != nil {
@@ -315,17 +446,21 @@ func (p *CFProvider) EnsureOrgAndSpace() error {
 		}
 	}
 
-	_, err = p.cfClient.GetSpaceByName(p.providerConfig.Space, org.Guid)
+	space, err = p.cfClient.GetSpaceByName(p.providerConfig.Space, org.Guid)
 	if err != nil {
 		spaceRequest := cfclient.SpaceRequest{
 			Name:             p.providerConfig.Space,
 			OrganizationGuid: org.Guid,
 		}
 
-		_, err := p.cfClient.CreateSpace(spaceRequest)
+		space, err = p.cfClient.CreateSpace(spaceRequest)
 		if err != nil {
 			return err
 		}
 	}
+
+	p.Org = org
+	p.Space = space
+
 	return nil
 }
