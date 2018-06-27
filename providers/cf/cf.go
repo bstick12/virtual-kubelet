@@ -238,6 +238,18 @@ func (p *CFProvider) DeletePod(pod *v1.Pod) (err error) {
 		return err
 	}
 
+	app, err := p.cfClient.AppByName(pod.Name, p.Space.Guid, p.Org.Guid)
+
+	if err != nil {
+		return err
+	}
+
+	err = p.cfClient.DeleteApp(app.Guid)
+
+	if err != nil {
+		return err
+	}
+
 	delete(p.pods, key)
 
 	return nil
