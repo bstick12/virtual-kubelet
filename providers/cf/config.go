@@ -7,10 +7,11 @@ import (
 )
 
 type providerConfig struct {
-	CFAPI   string
-	Org          string
-	Space string
-	AccessToken             string
+	CFAPI    string
+	Org      string
+	Space    string
+	Username string
+	Password string
 }
 
 func (p *CFProvider) loadConfig(r io.Reader) error {

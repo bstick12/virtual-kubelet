@@ -6,6 +6,7 @@ import (
 	"os"
 	"time"
 
+	cfclient "github.com/cloudfoundry-community/go-cfclient"
 	"github.com/virtual-kubelet/virtual-kubelet/manager"
 	"github.com/virtual-kubelet/virtual-kubelet/providers"
 	"k8s.io/api/core/v1"
@@ -21,6 +22,7 @@ type CFProvider struct {
 	daemonEndpointPort int32
 	pods               map[string]*v1.Pod
 	providerConfig     providerConfig
+	cfClient           *cfclient.Client
 }
 
 // NewCFProvider creates a new CFProvider
@@ -46,6 +48,20 @@ func NewCFProvider(config string, rm *manager.ResourceManager, nodeName, operati
 		}
 	}
 
+	cfConfig := &cfclient.Config{
+		ApiAddress:        provider.providerConfig.CFAPI,
+		Username:          provider.providerConfig.Username,
+		Password:          provider.providerConfig.Password,
+		SkipSslValidation: true,
+	}
+
+	client, err := cfclient.NewClient(cfConfig)
+	if err != nil {
+		return &CFProvider{}, err
+	}
+
+	provider.cfClient = client
+	fmt.Printf("%#v\n", &provider)
 	return &provider, nil
 }
 
