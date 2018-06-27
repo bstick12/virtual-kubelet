@@ -5,6 +5,7 @@ import (
 	"github.com/virtual-kubelet/virtual-kubelet/providers/azure"
 	"github.com/virtual-kubelet/virtual-kubelet/providers/azurebatch"
 	"github.com/virtual-kubelet/virtual-kubelet/providers/cri"
+	"github.com/virtual-kubelet/virtual-kubelet/providers/cf"
 	"github.com/virtual-kubelet/virtual-kubelet/providers/hypersh"
 	"github.com/virtual-kubelet/virtual-kubelet/providers/web"
 	"k8s.io/api/core/v1"
@@ -17,6 +18,7 @@ var _ Provider = (*hypersh.HyperProvider)(nil)
 var _ Provider = (*web.BrokerProvider)(nil)
 var _ Provider = (*azurebatch.Provider)(nil)
 var _ Provider = (*cri.CRIProvider)(nil)
+var _ Provider = (*cf.CFProvider)(nil)
 
 // Provider contains the methods required to implement a virtual-kubelet provider.
 type Provider interface {

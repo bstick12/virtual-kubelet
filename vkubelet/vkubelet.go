@@ -14,6 +14,7 @@ import (
 	"github.com/virtual-kubelet/virtual-kubelet/providers/aws"
 	"github.com/virtual-kubelet/virtual-kubelet/providers/azure"
 	"github.com/virtual-kubelet/virtual-kubelet/providers/azurebatch"
+	"github.com/virtual-kubelet/virtual-kubelet/providers/cf"
 	"github.com/virtual-kubelet/virtual-kubelet/providers/cri"
 	"github.com/virtual-kubelet/virtual-kubelet/providers/hypersh"
 	"github.com/virtual-kubelet/virtual-kubelet/providers/mock"
@@ -30,7 +31,7 @@ import (
 )
 
 const (
-        PodStatusReason_ProviderFailed = "ProviderFailed"
+	PodStatusReason_ProviderFailed = "ProviderFailed"
 )
 
 // Server masquarades itself as a kubelet and allows for the virtual node to be backed by non-vm/node providers.
@@ -118,6 +119,11 @@ func New(nodeName, operatingSystem, namespace, kubeConfig, taint, provider, prov
 		}
 	case "cri":
 		p, err = cri.NewCRIProvider(nodeName, operatingSystem, internalIP, rm, daemonEndpointPort)
+		if err != nil {
+			return nil, err
+		}
+	case "cf":
+		p, err = cf.NewCFProvider(providerConfig, rm, nodeName, operatingSystem, internalIP, daemonEndpointPort)
 		if err != nil {
 			return nil, err
 		}
@@ -230,7 +236,7 @@ func (s *Server) Run() error {
 			log.Fatal("Failed to watch pods", err)
 		}
 
-		loop:
+	loop:
 		for {
 			select {
 			case ev, ok := <-s.podWatcher.ResultChan():
@@ -286,7 +292,7 @@ func (s *Server) updateNode() {
 	n.Status.Allocatable = capacity
 
 	n.Status.Addresses = s.provider.NodeAddresses()
-	
+
 	n, err = s.k8sClient.CoreV1().Nodes().UpdateStatus(n)
 	if err != nil {
 		log.Println("Failed to update node:", err)
