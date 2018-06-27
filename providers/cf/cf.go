@@ -62,6 +62,12 @@ func NewCFProvider(config string, rm *manager.ResourceManager, nodeName, operati
 
 	provider.cfClient = client
 	fmt.Printf("%#v\n", &provider)
+
+	err = provider.EnsureOrgAndSpace()
+	if err != nil {
+		return nil, err
+	}
+
 	return &provider, nil
 }
 
@@ -293,4 +299,33 @@ func buildKey(pod *v1.Pod) (string, error) {
 	}
 
 	return buildKeyFromNames(pod.ObjectMeta.Namespace, pod.ObjectMeta.Name)
+}
+
+func (p *CFProvider) EnsureOrgAndSpace() error {
+
+	var org cfclient.Org
+
+	org, err := p.cfClient.GetOrgByName(p.providerConfig.Org)
+	if err != nil {
+		orgRequest := cfclient.OrgRequest{Name: p.providerConfig.Org}
+
+		org, err = p.cfClient.CreateOrg(orgRequest)
+		if err != nil {
+			return err
+		}
+	}
+
+	_, err = p.cfClient.GetSpaceByName(p.providerConfig.Space, org.Guid)
+	if err != nil {
+		spaceRequest := cfclient.SpaceRequest{
+			Name:             p.providerConfig.Space,
+			OrganizationGuid: org.Guid,
+		}
+
+		_, err := p.cfClient.CreateSpace(spaceRequest)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
